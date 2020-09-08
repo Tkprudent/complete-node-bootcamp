@@ -1,32 +1,36 @@
 pipeline {
      agent any
+     environment {
+        registry = "ktijani/udacity-capstone"
+        registryCredential = 'dockerhub'
+        dockerImage = ''
+    }
      stages {
-         stage('Build') {
-             steps {
-                 sh 'echo "Hello World"'
-                 sh '''
-                     echo "Multiline shell steps works too"
-                     ls -lah
-                 '''
-             }
-         }
-         stage('Lint HTML') {
+         stage('Lint files') {
               steps {
-                  sh 'tidy -q -e *.html'
+                  sh 'make lint'
               }
          }
-         stage('Security Scan') {
-              steps { 
-                 aquaMicroscanner imageName: 'alpine:latest', notCompliesCmd: 'exit 1', onDisallowed: 'fail', outputFormat: 'html'
-              }
-         }         
-         stage('Upload to AWS') {
-              steps {
-                  withAWS(region:'us-west-2',credentials:'ktijani') {
-                  sh 'echo "Uploading content with AWS creds"'
-                      s3Upload(pathStyleAccessEnabled: true, payloadSigningEnabled: true, file:'index.html', bucket:'static-web-jenkins')
-                  }
-              }
-         }
+         stage('Building image') {
+            steps{
+                script {
+                    dockerImage = docker.build registry + ":$BUILD_NUMBER"
+                }
+            }
+        }
+        stage('Upload Image to Docker hub') {
+            steps{
+                script {
+                    docker.withRegistry( '', registryCredential ) {
+                        dockerImage.push()
+                    }
+                }
+            }
+        }
+        stage('Remove Unused docker image') {
+            steps{
+                sh "docker rmi $registry:$BUILD_NUMBER"
+            }
+        }
      }
 }
